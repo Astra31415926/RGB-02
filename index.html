@@ -1,102 +1,141 @@
-
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner No. 1</title>
-    <script src="https://unpkg.com/html5-qrcode"></script>
-    <style>
-        body { margin: 0; background: #000; color: #fff; font-family: sans-serif; text-align: center; }
-        h1 { font-size: 18px; margin: 10px 0; color: #888; }
-        #view { width: 100%; max-width: 400px; aspect-ratio: 4/3; background: #111; margin: 0 auto; display: block; border-bottom: 2px solid #333; }
-        .controls { padding: 20px; display: flex; justify-content: center; gap: 15px; }
-        .btn { width: 60px; height: 60px; border-radius: 50%; border: 3px solid #fff; cursor: pointer; transition: 0.2s; }
-        .btn-r { background: #ff4444; } .btn-g { background: #44ff44; } .btn-b { background: #4444ff; }
-        .btn-rgb { background: linear-gradient(45deg, red, green, blue); }
-        .results { padding: 10px; text-align: left; max-width: 400px; margin: 0 auto; }
-        .res-item { margin-bottom: 10px; font-family: monospace; font-size: 14px; border-left: 4px solid #333; padding-left: 10px; }
-        .r-text { border-color: red; } .g-text { border-color: green; } .b-text { border-color: blue; }
-        #reader { display: none; }
-    </style>
+<meta charset="UTF-8">
+<title>RGB QR Scanner</title>
+<style>
+  body {
+    margin: 0;
+    background: #111;
+    color: white;
+    font-family: sans-serif;
+    text-align: center;
+  }
+
+  canvas {
+    margin-top: 40px;
+    max-width: 90vw;
+    border-radius: 12px;
+  }
+
+  .buttons {
+    margin-top: 15px;
+  }
+
+  button {
+    font-size: 20px;
+    margin: 5px;
+    padding: 10px 15px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+
+  .r { background: red; }
+  .g { background: green; }
+  .b { background: blue; }
+  .c { background: gray; }
+
+  .outputs {
+    margin-top: 20px;
+    font-size: 14px;
+  }
+</style>
 </head>
 <body>
 
-    <h1>Сканер № 1</h1>
-    <canvas id="view"></canvas>
-    <div id="reader"></div>
+<canvas id="canvas"></canvas>
 
-    <div class="controls">
-        <div class="btn btn-r" onclick="mode='R'"></div>
-        <div class="btn btn-g" onclick="mode='G'"></div>
-        <div class="btn btn-b" onclick="mode='B'"></div>
-        <div class="btn btn-rgb" onclick="mode='RGB'"></div>
-    </div>
+<div class="buttons">
+  <button class="c" onclick="mode='color'">RGB</button>
+  <button class="r" onclick="mode='r'">R</button>
+  <button class="g" onclick="mode='g'">G</button>
+  <button class="b" onclick="mode='b'">B</button>
+</div>
 
-    <div class="results">
-        <div class="res-item r-text">R: <span id="outR">...</span></div>
-        <div class="res-item g-text">G: <span id="outG">...</span></div>
-        <div class="res-item b-text">B: <span id="outB">...</span></div>
-    </div>
+<div class="outputs">
+  <div id="outR">R: ...</div>
+  <div id="outG">G: ...</div>
+  <div id="outB">B: ...</div>
+</div>
 
-    <button onclick="location.reload()" style="background:#333; color:#fff; border:none; padding:10px 20px; border-radius:20px;">СБРОС</button>
+<script src="https://cdn.jsdelivr.net/npm/jsqr"></script>
 
 <script>
-let mode = 'RGB';
-const view = document.getElementById('view');
-const vCtx = view.getContext('2d', { willReadFrequently: true });
-const buffer = document.createElement('canvas');
-const scanner = new Html5Qrcode("reader");
+let mode = "color";
 
-async function start() {
-    await scanner.start({ facingMode: "environment" }, { fps: 20 }, () => {});
-    const video = document.querySelector('#reader video');
-    video.onloadedmetadata = () => loop(video);
-}
+const video = document.createElement("video");
+video.setAttribute("playsinline", true);
 
-function loop(video) {
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+navigator.mediaDevices.getUserMedia({
+  video: { facingMode: "environment" }
+}).then(stream => {
+  video.srcObject = stream;
+  video.play();
+  requestAnimationFrame(loop);
+});
+
+function loop() {
+  if (video.readyState === video.HAVE_ENOUGH_DATA) {
     const w = video.videoWidth;
     const h = video.videoHeight;
-    view.width = w; view.height = h;
-    buffer.width = w; buffer.height = h;
-    const bCtx = buffer.getContext('2d');
 
-    setInterval(() => {
-        bCtx.drawImage(video, 0, 0, w, h);
-        const img = bCtx.getImageData(0, 0, w, h);
-        const data = img.data;
+    canvas.width = w;
+    canvas.height = h;
 
-        // Создаем три канала для сканирования
-        const channels = { R: 0, G: 1, B: 2 };
-        
-        for (const [ch, offset] of Object.entries(channels)) {
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = w; tempCanvas.height = h;
-            const tCtx = tempCanvas.getContext('2d');
-            const tImg = tCtx.createImageData(w, h);
+    ctx.drawImage(video, 0, 0, w, h);
 
-            for (let i = 0; i < data.length; i += 4) {
-                // БИНАРИЗАЦИЯ: Если значение канала > 120, пиксель белый, иначе черный
-                const val = data[i + offset] > 120 ? 255 : 0;
-                tImg.data[i] = tImg.data[i+1] = tImg.data[i+2] = val;
-                tImg.data[i+3] = 255;
-            }
-            tCtx.putImageData(tImg, 0, 0);
+    const frame = ctx.getImageData(0, 0, w, h);
+    const data = frame.data;
 
-            // Если это активный режим, рисуем на главный экран
-            if (mode === ch) vCtx.putImageData(tImg, 0, 0);
+    const r = new Uint8ClampedArray(data);
+    const g = new Uint8ClampedArray(data);
+    const b = new Uint8ClampedArray(data);
 
-            // Фоновое сканирование
-            Html5Qrcode.scanImage(tempCanvas, { showFps: false })
-                .then(text => document.getElementById('out' + ch).innerText = text)
-                .catch(() => {});
-        }
+    for (let i = 0; i < data.length; i += 4) {
+      const rv = data[i];
+      const gv = data[i+1];
+      const bv = data[i+2];
 
-        if (mode === 'RGB') vCtx.drawImage(video, 0, 0, w, h);
-    }, 200);
+      // grayscale per channel
+      r[i]=r[i+1]=r[i+2]=rv;
+      g[i]=g[i+1]=g[i+2]=gv;
+      b[i]=b[i+1]=b[i+2]=bv;
+    }
+
+    // отображение
+    if (mode === "r") ctx.putImageData(new ImageData(r, w, h), 0, 0);
+    else if (mode === "g") ctx.putImageData(new ImageData(g, w, h), 0, 0);
+    else if (mode === "b") ctx.putImageData(new ImageData(b, w, h), 0, 0);
+    else ctx.putImageData(frame, 0, 0);
+
+    // декод
+    decodeChannel(r, w, h, "outR");
+    decodeChannel(g, w, h, "outG");
+    decodeChannel(b, w, h, "outB");
+  }
+
+  setTimeout(() => requestAnimationFrame(loop), 200);
 }
 
-start();
+function decodeChannel(arr, w, h, outId) {
+  const bin = new Uint8ClampedArray(arr);
+
+  for (let i = 0; i < bin.length; i += 4) {
+    const v = bin[i] > 128 ? 255 : 0;
+    bin[i]=bin[i+1]=bin[i+2]=v;
+  }
+
+  const img = new ImageData(bin, w, h);
+  const qr = jsQR(img.data, w, h);
+
+  document.getElementById(outId).innerText =
+    qr ? (outId[3] + ": " + qr.data) : (outId[3] + ": ...");
+}
 </script>
+
 </body>
 </html>
